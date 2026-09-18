@@ -1,0 +1,26 @@
+{
+  "n_examples": 100,
+  "checkpoint": "data\\parsed\\stage4\\checkpoints\\step_005000.pt",
+  "step": 5000,
+  "correlation": {
+    "R": -0.07790996768002514,
+    "G": -0.09110991678951004,
+    "B": -0.08053332351305979
+  },
+  "mae": {
+    "R": 0.6516225667881755,
+    "G": 0.6728188177781036,
+    "B": 0.634096404045101
+  },
+  "shuffled_baseline": {
+    "R": 0.005047453970273876,
+    "G": 0.07943604639557177,
+    "B": 0.15241165461304718
+  },
+  "supervised_baseline": {
+    "R": 0.986,
+    "G": 0.986,
+    "B": 0.985
+  },
+  "supervised_baseline_source": "fallback constant; latest parsed Phase 0 result"
+}

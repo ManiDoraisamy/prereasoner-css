@@ -1,0 +1,93 @@
+{
+  "n_examples": 1500,
+  "step": 5000,
+  "best_dim_per_property": [
+    {
+      "probe": "pos_func",
+      "label": "'hsl('",
+      "best_H_dim": 43,
+      "best_H_r": 0.4490350886676672,
+      "best_S_dim": 50,
+      "best_S_r": 0.5139520030238175,
+      "best_L_dim": 333,
+      "best_L_r": 0.46598753112294367
+    },
+    {
+      "probe": "pos_h",
+      "label": "H component",
+      "best_H_dim": 100,
+      "best_H_r": 0.7745613437215,
+      "best_S_dim": 169,
+      "best_S_r": 0.7308164042947339,
+      "best_L_dim": 42,
+      "best_L_r": 0.4928947189173255
+    },
+    {
+      "probe": "pos_s",
+      "label": "S component",
+      "best_H_dim": 121,
+      "best_H_r": 0.6558332550958947,
+      "best_S_dim": 377,
+      "best_S_r": 0.8419957471063537,
+      "best_L_dim": 305,
+      "best_L_r": 0.5523690735233681
+    },
+    {
+      "probe": "pos_l",
+      "label": "L component",
+      "best_H_dim": 348,
+      "best_H_r": 0.479177854736386,
+      "best_S_dim": 42,
+      "best_S_r": 0.5488962387149954,
+      "best_L_dim": 69,
+      "best_L_r": 0.7735202567700477
+    },
+    {
+      "probe": "pos_close",
+      "label": "')'  (Stage 8 baseline)",
+      "best_H_dim": 176,
+      "best_H_r": 0.5350763372789308,
+      "best_S_dim": 176,
+      "best_S_r": 0.6346699027409852,
+      "best_L_dim": 249,
+      "best_L_r": 0.4846227098226398
+    }
+  ],
+  "rgb_propagation_per_probe": [
+    {
+      "probe": "pos_func",
+      "label": "'hsl('",
+      "r_R": -0.39911647886988816,
+      "r_G": -0.2719958351078894,
+      "r_B": 0.40529215296425436
+    },
+    {
+      "probe": "pos_h",
+      "label": "H component",
+      "r_R": -0.17322091136015116,
+      "r_G": -0.2562026559005306,
+      "r_B": -0.018413350330464272
+    },
+    {
+      "probe": "pos_s",
+      "label": "S component",
+      "r_R": 0.004453189206918167,
+      "r_G": -0.07064541137158757,
+      "r_B": -0.043620217662262435
+    },
+    {
+      "probe": "pos_l",
+      "label": "L component",
+      "r_R": 0.2611763392502072,
+      "r_G": 0.35826505887753696,
+      "r_B": 0.33076946796807066
+    },
+    {
+      "probe": "pos_close",
+      "label": "')'  (Stage 8 baseline)",
+      "r_R": -0.22602198388165587,
+      "r_G": -0.33025704818148083,
+      "r_B": -0.38731602319769304
+    }
+  ]
+}
