@@ -180,32 +180,53 @@ def property_targets(examples):
     }
 
 
-def probe_checkpoint(model, cfg, examples, device):
-    """Return per-probe, per-property best dim / |r| / full correlation vector."""
+def probe_checkpoint(model, cfg, examples, device, split):
+    """Per-probe, per-property: select the best dim on split A, report on B.
+
+    Selecting the argmax over 381 dims and quoting its correlation on the
+    SAME examples is a selection procedure — the quoted number is biased
+    upward, and the original Phase 0 analysis did exactly that. Here:
+
+      - `select_r` : |r| of the winning dim on the selection half (A).
+        This is the biased, Phase-0-comparable number.
+      - `holdout_r`: |r| of that SAME dim on the untouched half (B).
+        This is the honest, headline number.
+
+    The hue sin/cos basis choice is also made on A only.
+    """
+    idx_a, idx_b = split
     acts = collect_activations(model, examples, cfg.hidden_dim, device)
     tgts = property_targets(examples)
 
     result = {}
     for p in PROBES:
-        # Hue: take the stronger of the sin and cos bases (Phase 0 convention).
-        r_sin = all_dim_correlations(acts[p], tgts["H_sin"])
-        r_cos = all_dim_correlations(acts[p], tgts["H_cos"])
-        r_h = r_sin if r_sin.max() >= r_cos.max() else r_cos
+        a = acts[p]
+        # Hue: choose the stronger basis on the SELECTION half only.
+        r_sin_a = all_dim_correlations(a[idx_a], tgts["H_sin"][idx_a])
+        r_cos_a = all_dim_correlations(a[idx_a], tgts["H_cos"][idx_a])
+        if r_sin_a.max() >= r_cos_a.max():
+            h_vec_a, h_target = r_sin_a, tgts["H_sin"]
+        else:
+            h_vec_a, h_target = r_cos_a, tgts["H_cos"]
 
-        per_prop = {"H": r_h,
-                    "S": all_dim_correlations(acts[p], tgts["S"]),
-                    "L": all_dim_correlations(acts[p], tgts["L"])}
-
-        result[p] = {
-            prop: {
-                "best_dim": int(np.argmax(vec)),
-                "best_r": float(np.max(vec)),
-                "n_above_0.5": int((vec >= 0.5).sum()),
-                "n_above_0.7": int((vec >= 0.7).sum()),
-                "all_r": vec,          # kept in-memory for overlap stats
-            }
-            for prop, vec in per_prop.items()
+        per_prop = {
+            "H": (h_vec_a, h_target),
+            "S": (all_dim_correlations(a[idx_a], tgts["S"][idx_a]), tgts["S"]),
+            "L": (all_dim_correlations(a[idx_a], tgts["L"][idx_a]), tgts["L"]),
         }
+
+        result[p] = {}
+        for prop, (vec_a, target) in per_prop.items():
+            best = int(np.argmax(vec_a))
+            holdout_r = abs(safe_corr(a[idx_b, best], target[idx_b]))
+            result[p][prop] = {
+                "best_dim": best,
+                "select_r": float(np.max(vec_a)),
+                "holdout_r": float(holdout_r),
+                "n_above_0.5": int((vec_a >= 0.5).sum()),
+                "n_above_0.7": int((vec_a >= 0.7).sum()),
+                "all_r": vec_a,        # selection-half vector, for overlap stats
+            }
     # acts is returned so the bootstrap and the shuffled control can reuse it
     # instead of paying for another full inference pass.
     return result, acts
@@ -321,11 +342,17 @@ def topk_overlap(per_seed_vectors, k):
 
 
 def summarize(per_seed, seed_labels):
-    """Index stability vs magnitude stability, per property."""
+    """Index stability vs magnitude stability, per property.
+
+    Magnitude statistics use HOLDOUT correlations (dim selected on half A,
+    r measured on half B). Selection-half values are kept per seed for
+    comparison with the original Phase 0 in-sample numbers.
+    """
     summary = {}
     for prop, probe in CANONICAL_PROBE.items():
         best_dims = [s[probe][prop]["best_dim"] for s in per_seed]
-        best_rs = [s[probe][prop]["best_r"] for s in per_seed]
+        select_rs = [s[probe][prop]["select_r"] for s in per_seed]
+        holdout_rs = [s[probe][prop]["holdout_r"] for s in per_seed]
         above_05 = [s[probe][prop]["n_above_0.5"] for s in per_seed]
         vectors = [s[probe][prop]["all_r"] for s in per_seed]
 
@@ -336,8 +363,10 @@ def summarize(per_seed, seed_labels):
             "probe": probe,
             "probe_label": PROBE_LABELS[probe],
             "per_seed": [
-                {"seed": lbl, "best_dim": d, "best_r": r, "n_above_0.5": n}
-                for lbl, d, r, n in zip(seed_labels, best_dims, best_rs, above_05)
+                {"seed": lbl, "best_dim": d, "select_r": sr,
+                 "holdout_r": hr, "n_above_0.5": n}
+                for lbl, d, sr, hr, n in zip(
+                    seed_labels, best_dims, select_rs, holdout_rs, above_05)
             ],
             "index_stability": {
                 "unique_dims": len(set(best_dims)),
@@ -345,10 +374,11 @@ def summarize(per_seed, seed_labels):
                 "pairwise_agreement": (n_agree / n_pairs) if n_pairs else None,
             },
             "magnitude_stability": {
-                "mean_best_r": float(np.mean(best_rs)),
-                "std_best_r": float(np.std(best_rs)),
-                "min_best_r": float(np.min(best_rs)),
-                "max_best_r": float(np.max(best_rs)),
+                "mean_holdout_r": float(np.mean(holdout_rs)),
+                "std_holdout_r": float(np.std(holdout_rs)),
+                "min_holdout_r": float(np.min(holdout_rs)),
+                "max_holdout_r": float(np.max(holdout_rs)),
+                "mean_select_r": float(np.mean(select_rs)),
             },
             "count_stability": {
                 "mean_n_above_0.5": float(np.mean(above_05)),
@@ -379,6 +409,11 @@ def main():
                         help="Label per checkpoint (default: parent dir name).")
     parser.add_argument("--stage2-dir", default="data/parsed/stage2")
     parser.add_argument("--css-dir", default="data/stage1/css")
+    parser.add_argument("--file-list", default=None,
+                        help="Text file of .css paths (overrides --css-dir). "
+                             "Use data/splits/holdout_files.txt so every "
+                             "number is computed on files the model never "
+                             "trained on (PROTOCOL.md D4).")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--n-files", type=int, default=20000)
     parser.add_argument("--max-examples", type=int, default=1500)
@@ -408,12 +443,20 @@ def main():
     _, cfg0, _ = load_model(args.ckpt[0], args.device)
     examples = extract_multiprobe_examples(
         tok, args.n_files, args.max_examples, cfg0.context_len,
-        css_dir=args.css_dir,
+        css_dir=args.css_dir, file_list=args.file_list,
     )
     print(f"    {len(examples)} examples")
-    if len(examples) < 100:
-        print("Not enough examples; aborting.")
+    if len(examples) < 200:
+        print("Not enough examples (need >= 200 for split-half); aborting.")
         return
+
+    # One fixed selection/holdout split, shared by every seed: dims are
+    # SELECTED on half A and REPORTED on half B. The split seed is a
+    # constant, not derived from the model seeds.
+    n = len(examples)
+    perm = np.random.default_rng(1).permutation(n)
+    split = (np.sort(perm[: n // 2]), np.sort(perm[n // 2:]))
+    print(f"    split: {len(split[0])} selection / {len(split[1])} holdout")
 
     print(f"\n[2] Probing {len(args.ckpt)} checkpoints...")
     per_seed, steps, acts0 = [], [], None
@@ -425,7 +468,7 @@ def main():
                 f"hidden_dim mismatch: {lbl} has {cfg.hidden_dim}, "
                 f"expected {cfg0.hidden_dim}. Seeds must share architecture."
             )
-        result, acts = probe_checkpoint(model, cfg, examples, args.device)
+        result, acts = probe_checkpoint(model, cfg, examples, args.device, split)
         per_seed.append(result)
         steps.append(int(ckpt["step"]))
         if acts0 is None:
@@ -474,15 +517,16 @@ def main():
         print(f"\n--- {prop} at {s['probe_label']} ---")
         for row in s["per_seed"]:
             print(f"  {row['seed']:<12} best dim {row['best_dim']:>4}   "
-                  f"|r| = {row['best_r']:.3f}   "
+                  f"select |r| = {row['select_r']:.3f}   "
+                  f"holdout |r| = {row['holdout_r']:.3f}   "
                   f"dims>=0.5: {row['n_above_0.5']}")
         idx, mag = s["index_stability"], s["magnitude_stability"]
         print(f"  index   : {idx['unique_dims']} distinct dims across "
               f"{idx['n_seeds']} seeds  "
               f"(pairwise agreement {idx['pairwise_agreement']:.0%})")
-        print(f"  magnitude: |r| = {mag['mean_best_r']:.3f} "
-              f"+/- {mag['std_best_r']:.3f}  "
-              f"[{mag['min_best_r']:.3f}, {mag['max_best_r']:.3f}]")
+        print(f"  holdout magnitude: |r| = {mag['mean_holdout_r']:.3f} "
+              f"+/- {mag['std_holdout_r']:.3f}  "
+              f"[{mag['min_holdout_r']:.3f}, {mag['max_holdout_r']:.3f}]")
         for ov in s["topk_overlap"]:
             print(f"  top-{ov['k']:<3} overlap: Jaccard "
                   f"{ov['mean_jaccard']:.3f} vs chance {ov['chance_jaccard']:.3f}")

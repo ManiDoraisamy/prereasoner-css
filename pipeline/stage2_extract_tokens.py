@@ -37,16 +37,30 @@ OUT_DIR = Path("data/parsed/stage2")
 
 
 def main():
+    global OUT_DIR
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=None,
                         help="Process only the first N files (for testing)")
+    parser.add_argument("--css-dir", type=Path, default=CSS_DIR)
+    parser.add_argument("--file-list", type=Path, default=None,
+                        help="Text file of .css paths, one per line. Build the "
+                             "vocab from the TRAIN shard only so token "
+                             "frequencies never see holdout files.")
+    parser.add_argument("--out", type=Path, default=OUT_DIR,
+                        help="Output directory (default: data/parsed/stage2)")
     args = parser.parse_args()
 
+    OUT_DIR = args.out
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    files = sorted(CSS_DIR.glob("*.css"))
+    if args.file_list:
+        files = [Path(line.strip()) for line in
+                 args.file_list.read_text(encoding="utf-8").splitlines()
+                 if line.strip()]
+    else:
+        files = sorted(args.css_dir.glob("*.css"))
     if not files:
-        print(f"No files in {CSS_DIR}. Run stage1_download.py first.")
+        print(f"No files found. Run stage1_download.py first.")
         return
     if args.limit:
         files = files[: args.limit]

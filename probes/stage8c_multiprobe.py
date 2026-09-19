@@ -94,9 +94,43 @@ def find_hsl_components(stream, hsl_pos: int) -> tuple[int, int, int, int] | Non
     return (func_pos, components[0], components[1], components[2])
 
 
+def _map_pos(stream_to_id, ids, stream_pos: int, pos_mode: str,
+             add_special: bool = True) -> int:
+    """Map a stream position to an ID position.
+
+    pos_mode="last" (correct): the LAST sub-id of the stream token — the
+    position at which the model has read the complete token. For atomic
+    (fat-head) tokens this equals the first sub-id, so with the 0-360
+    integer vocab the two modes coincide on colour tokens.
+
+    pos_mode="first" (legacy): the first sub-id, which is what the original
+    Phase 0 analysis used. On a BPE-split hue like "312" this probes a state
+    that has only seen "31" — kept solely to reproduce archived results.
+    """
+    start = stream_to_id[stream_pos]
+    if pos_mode == "first":
+        return start
+    end = (stream_to_id[stream_pos + 1]
+           if stream_pos + 1 < len(stream_to_id)
+           else len(ids) - (1 if add_special else 0))
+    return end - 1
+
+
 def extract_multiprobe_examples(tok, n_files, max_examples, context_len,
-                                css_dir=Path("data/stage1/css")):
-    files = sorted(Path(css_dir).glob("*.css"))[:n_files]
+                                css_dir=Path("data/stage1/css"),
+                                pos_mode="last", file_list=None):
+    """Collect hsl() examples with their component-token positions.
+
+    file_list (a text file of .css paths, one per line) takes precedence
+    over css_dir. That is how probes are restricted to HELD-OUT files —
+    files excluded from the training shard — per docs/PROTOCOL.md D4.
+    """
+    if file_list is not None:
+        files = [Path(line.strip()) for line in
+                 Path(file_list).read_text(encoding="utf-8").splitlines()
+                 if line.strip()][:n_files]
+    else:
+        files = sorted(Path(css_dir).glob("*.css"))[:n_files]
     examples = []
     for path in tqdm(files, desc="Extracting"):
         try:
@@ -118,12 +152,12 @@ def extract_multiprobe_examples(tok, n_files, max_examples, context_len,
                 continue
             func_sp, h_sp, s_sp, l_sp = comp
             close_sp = h_det.position
-            # Get ID-space positions
-            func_id = stream_to_id[func_sp]
-            h_id = stream_to_id[h_sp]
-            s_id = stream_to_id[s_sp]
-            l_id = stream_to_id[l_sp]
-            close_id = stream_to_id[close_sp]
+            # Get ID-space positions (see _map_pos for first-vs-last semantics)
+            func_id = _map_pos(stream_to_id, ids, func_sp, pos_mode)
+            h_id = _map_pos(stream_to_id, ids, h_sp, pos_mode)
+            s_id = _map_pos(stream_to_id, ids, s_sp, pos_mode)
+            l_id = _map_pos(stream_to_id, ids, l_sp, pos_mode)
+            close_id = _map_pos(stream_to_id, ids, close_sp, pos_mode)
             max_id = close_id
             if max_id >= context_len:
                 start = max_id - context_len + 1
@@ -179,6 +213,13 @@ def main():
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--n-files", type=int, default=20000)
     parser.add_argument("--max-examples", type=int, default=1500)
+    parser.add_argument("--file-list", default=None,
+                        help="Text file of .css paths (overrides the corpus "
+                             "glob). Use data/splits/holdout_files.txt.")
+    parser.add_argument("--pos-mode", choices=("last", "first"), default="last",
+                        help="'last' probes the final sub-id of a component "
+                             "token (correct). 'first' reproduces the archived "
+                             "Phase 0 numbers (results/multiprobe.json).")
     args = parser.parse_args()
 
     np.random.seed(0)
@@ -195,9 +236,11 @@ def main():
     model.load_state_dict(ckpt["model_state"])
     model.eval()
 
-    print(f"\n[1] Extracting HSL examples with component positions...")
+    print(f"\n[1] Extracting HSL examples with component positions "
+          f"(pos_mode={args.pos_mode})...")
     examples = extract_multiprobe_examples(
         tok, args.n_files, args.max_examples, cfg.context_len,
+        pos_mode=args.pos_mode, file_list=args.file_list,
     )
     print(f"  Collected: {len(examples)}")
     if len(examples) < 100:

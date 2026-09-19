@@ -62,6 +62,15 @@ def main():
                         help="Process only the first N files (for smoke runs)")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT,
                         help="Output directory")
+    parser.add_argument("--css-dir", type=Path, default=CSS_DIR,
+                        help="Directory of .css files (default: data/stage1/css)")
+    parser.add_argument("--file-list", type=Path, default=None,
+                        help="Text file of .css paths, one per line. Overrides "
+                             "--css-dir globbing; this is how the stratified "
+                             "train shard is selected (see make_splits.py). "
+                             "Order in the list is preserved.")
+    parser.add_argument("--stage2-dir", type=Path, default=Path("data/parsed/stage2"),
+                        help="Tokenizer directory")
     parser.add_argument("--add-special", action="store_true", default=True,
                         help="Prepend BOS / append EOS per file (default true)")
     args = parser.parse_args()
@@ -69,10 +78,19 @@ def main():
     out_dir: Path = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    tok = CSSTokenizer.load("data/parsed/stage2")
+    tok = CSSTokenizer.load(str(args.stage2_dir))
     print(f"Tokenizer: {tok}")
 
-    files = sorted(CSS_DIR.glob("*.css"))
+    if args.file_list:
+        files = [Path(line.strip()) for line in
+                 args.file_list.read_text(encoding="utf-8").splitlines()
+                 if line.strip()]
+        missing = [f for f in files if not f.exists()]
+        if missing:
+            raise SystemExit(f"--file-list has {len(missing)} missing files, "
+                             f"first: {missing[0]}")
+    else:
+        files = sorted(args.css_dir.glob("*.css"))
     if args.limit:
         files = files[: args.limit]
     print(f"Pre-encoding {len(files):,} files -> {out_dir}/")
@@ -92,6 +110,9 @@ def main():
     total_value_context = 0      # for diagnostics: how many tokens are CTX_VALUE
     files_with_no_anchors = 0
     failed_files = 0
+    dropped_split_anchors = 0    # anchors on multi-ID (BPE-split) tokens
+    anchors_by_source: dict[str, int] = {}
+    total_hsl_detected = 0       # detected-but-never-anchored, for the record
 
     with open(tokens_path, "wb") as tok_f, open(anchors_path, "wb") as anc_f:
         for file_idx, path in enumerate(tqdm(files, unit="file", desc="Encoding")):
@@ -103,7 +124,7 @@ def main():
                 ids, stream_to_id = tok.encode_tokens_with_positions(
                     stream, add_special=args.add_special,
                 )
-                anchors, _hsls = detect_colors(stream)
+                anchors, hsls = detect_colors(stream)
             except Exception:
                 failed_files += 1
                 # Still record an empty file so file_idx aligns with our list
@@ -119,11 +140,30 @@ def main():
             # Diagnostic count
             total_value_context += sum(1 for _, _, c in stream if c == "value")
 
-            # Build anchor records for this file
-            if anchors:
-                recs = np.empty(len(anchors), dtype=ANCHOR_DTYPE)
-                for k, a in enumerate(anchors):
-                    id_pos = stream_to_id[a.position]
+            total_hsl_detected += len(hsls)
+
+            # Build anchor records for this file. An anchor must sit on an
+            # ATOMIC token: if the stream token BPE-split into multiple IDs,
+            # the mapped position is the FIRST fragment — a state that has
+            # not yet read the full value — so supervising there would be
+            # asking the model to know a number it hasn't seen. With the
+            # 0-360 force-include this should never fire for real colour
+            # tokens; we drop-and-count rather than silently mis-anchor.
+            kept = []
+            for a in anchors:
+                start = stream_to_id[a.position]
+                end = (stream_to_id[a.position + 1]
+                       if a.position + 1 < len(stream_to_id)
+                       else len(ids) - (1 if args.add_special else 0))
+                if end - start != 1:
+                    dropped_split_anchors += 1
+                    continue
+                kept.append((a, start))
+                anchors_by_source[a.source] = anchors_by_source.get(a.source, 0) + 1
+
+            if kept:
+                recs = np.empty(len(kept), dtype=ANCHOR_DTYPE)
+                for k, (a, id_pos) in enumerate(kept):
                     ch = -1 if a.channel is None else int(a.channel)
                     recs[k] = (file_idx, id_pos, a.r, a.g, a.b, ch, (0, 0, 0))
                 anc_f.write(recs.tobytes())
@@ -143,6 +183,10 @@ def main():
         "failed_files": failed_files,
         "total_tokens": total_tokens,
         "total_anchors": total_anchors,
+        "anchors_by_source": dict(sorted(anchors_by_source.items())),
+        "dropped_split_token_anchors": dropped_split_anchors,
+        "hsl_detected_never_anchored": total_hsl_detected,
+        "file_list": str(args.file_list) if args.file_list else None,
         "total_value_context_positions": total_value_context,
         "files_with_no_anchors": files_with_no_anchors,
         "add_special": bool(args.add_special),
@@ -169,6 +213,9 @@ def main():
     print(f"Total tokens (IDs)  : {total_tokens:,}")
     print(f"Total anchors       : {total_anchors:,}")
     print(f"  anchors / 1k IDs  : {1000 * total_anchors / max(1, total_tokens):.2f}")
+    print(f"  by source         : {dict(sorted(anchors_by_source.items()))}")
+    print(f"  dropped (split)   : {dropped_split_anchors:,}")
+    print(f"HSL detected (never anchored): {total_hsl_detected:,}")
     print(f"Files w/o anchors   : {files_with_no_anchors:,}")
     print(f"\nDisk usage:")
     for name, size_mb in meta["files_size_mb"].items():

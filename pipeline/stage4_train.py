@@ -120,10 +120,17 @@ def train(args):
     )
     print(f"  {len(dataset):,} training windows from up to {args.files or 'all'} files")
 
+    # Explicit generator: shuffle order is a function of --seed alone, not of
+    # however many RNG draws model init happened to consume first. Without
+    # this the order still derives from torch.manual_seed, but through global
+    # RNG state — reproducible only as long as no one reorders init code.
+    shuffle_gen = torch.Generator()
+    shuffle_gen.manual_seed(args.seed)
     loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=True,
+        generator=shuffle_gen,
         collate_fn=lambda b: collate_with_anchors(b, pad_id=tok.pad_id or 0),
         num_workers=0,
         drop_last=True,

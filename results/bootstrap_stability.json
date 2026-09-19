@@ -1,0 +1,186 @@
+{
+  "n_examples": 1500,
+  "checkpoints": [
+    "C:\\work\\prereasoner-flat-css\\data\\parsed\\stage4\\checkpoints\\step_005000.pt"
+  ],
+  "labels": [
+    "seed42_step5000"
+  ],
+  "steps": [
+    5000
+  ],
+  "hidden_dim": 384,
+  "n_searchable_dims": 381,
+  "shuffled_control": {
+    "n_perm": 200,
+    "probe": "pos_s",
+    "property": "S",
+    "mean_peak_r": 0.07112903991261564,
+    "p95_peak_r": 0.0948984565292578,
+    "max_peak_r": 0.10672604172389437
+  },
+  "bootstrap_index_stability": {
+    "H": {
+      "probe": "pos_h",
+      "full_sample_best_dim": 100,
+      "n_boot": 500,
+      "n_distinct_winners": 4,
+      "modal_dim": 100,
+      "modal_win_rate": 0.954,
+      "full_sample_dim_win_rate": 0.954,
+      "top_winners": [
+        {
+          "dim": 100,
+          "wins": 477
+        },
+        {
+          "dim": 377,
+          "wins": 13
+        },
+        {
+          "dim": 292,
+          "wins": 6
+        },
+        {
+          "dim": 255,
+          "wins": 4
+        }
+      ]
+    },
+    "S": {
+      "probe": "pos_s",
+      "full_sample_best_dim": 377,
+      "n_boot": 500,
+      "n_distinct_winners": 1,
+      "modal_dim": 377,
+      "modal_win_rate": 1.0,
+      "full_sample_dim_win_rate": 1.0,
+      "top_winners": [
+        {
+          "dim": 377,
+          "wins": 500
+        }
+      ]
+    },
+    "L": {
+      "probe": "pos_l",
+      "full_sample_best_dim": 69,
+      "n_boot": 500,
+      "n_distinct_winners": 1,
+      "modal_dim": 69,
+      "modal_win_rate": 1.0,
+      "full_sample_dim_win_rate": 1.0,
+      "top_winners": [
+        {
+          "dim": 69,
+          "wins": 500
+        }
+      ]
+    }
+  },
+  "summary": null,
+  "per_seed_raw": [
+    {
+      "pos_func": {
+        "H": {
+          "best_dim": 43,
+          "best_r": 0.4490350886676672,
+          "n_above_0.5": 0,
+          "n_above_0.7": 0
+        },
+        "S": {
+          "best_dim": 50,
+          "best_r": 0.5139520030238175,
+          "n_above_0.5": 3,
+          "n_above_0.7": 0
+        },
+        "L": {
+          "best_dim": 333,
+          "best_r": 0.46598753112294367,
+          "n_above_0.5": 0,
+          "n_above_0.7": 0
+        }
+      },
+      "pos_h": {
+        "H": {
+          "best_dim": 100,
+          "best_r": 0.7745613437215,
+          "n_above_0.5": 57,
+          "n_above_0.7": 4
+        },
+        "S": {
+          "best_dim": 169,
+          "best_r": 0.7308164042947339,
+          "n_above_0.5": 48,
+          "n_above_0.7": 2
+        },
+        "L": {
+          "best_dim": 42,
+          "best_r": 0.4928947189173255,
+          "n_above_0.5": 0,
+          "n_above_0.7": 0
+        }
+      },
+      "pos_s": {
+        "H": {
+          "best_dim": 121,
+          "best_r": 0.6558332550958947,
+          "n_above_0.5": 44,
+          "n_above_0.7": 0
+        },
+        "S": {
+          "best_dim": 377,
+          "best_r": 0.8419957471063537,
+          "n_above_0.5": 131,
+          "n_above_0.7": 28
+        },
+        "L": {
+          "best_dim": 305,
+          "best_r": 0.5523690735233681,
+          "n_above_0.5": 2,
+          "n_above_0.7": 0
+        }
+      },
+      "pos_l": {
+        "H": {
+          "best_dim": 348,
+          "best_r": 0.479177854736386,
+          "n_above_0.5": 0,
+          "n_above_0.7": 0
+        },
+        "S": {
+          "best_dim": 42,
+          "best_r": 0.5488962387149954,
+          "n_above_0.5": 7,
+          "n_above_0.7": 0
+        },
+        "L": {
+          "best_dim": 69,
+          "best_r": 0.7735202567700477,
+          "n_above_0.5": 66,
+          "n_above_0.7": 3
+        }
+      },
+      "pos_close": {
+        "H": {
+          "best_dim": 176,
+          "best_r": 0.5350763372789308,
+          "n_above_0.5": 8,
+          "n_above_0.7": 0
+        },
+        "S": {
+          "best_dim": 176,
+          "best_r": 0.6346699027409852,
+          "n_above_0.5": 87,
+          "n_above_0.7": 0
+        },
+        "L": {
+          "best_dim": 249,
+          "best_r": 0.4846227098226398,
+          "n_above_0.5": 0,
+          "n_above_0.7": 0
+        }
+      }
+    }
+  ]
+}

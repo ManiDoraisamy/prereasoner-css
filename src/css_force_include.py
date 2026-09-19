@@ -32,10 +32,14 @@ HEX_DIGIT_PAIRS = [f"{i:02x}" for i in range(256)]
 
 
 # ---------------------------------------------------------------------------
-# Integers 0 .. 255 (covers rgb() channels, common dim values, pcts)
+# Integers 0 .. 360 (covers rgb() channels 0-255, percentages 0-100, AND
+# hsl() hue degrees 0-360). The 256-360 extension matters: a hue like "312"
+# must be ONE atomic token, or the probe/anchor at "the H component token"
+# lands on the first BPE fragment — a position where the model has not yet
+# read the full number.
 # ---------------------------------------------------------------------------
 
-INTEGERS_0_255 = [str(i) for i in range(256)]
+INTEGERS_0_360 = [str(i) for i in range(361)]
 
 
 # ---------------------------------------------------------------------------
@@ -313,7 +317,7 @@ PSEUDO_CLASSES = [
 STRUCTURAL_LITERALS = [
     "{", "}", ";", ":", ",", "(", ")", "[", "]",
     ">", "+", "~", "*", "/", "!", "=", "^", "$", "|",
-    "-", "&", "@", "#",
+    "-", "&", "@", "#", "%",
 ]
 
 
@@ -334,7 +338,7 @@ def _dedup_preserve_order(items):
 ALL_FORCE_INCLUDE = _dedup_preserve_order(
     NAMED_COLORS_LIST
     + HEX_DIGIT_PAIRS
-    + INTEGERS_0_255
+    + INTEGERS_0_360
     + COMMON_FLOATS
     + CSS_PROPERTIES
     + CSS_AT_KEYWORDS
@@ -349,7 +353,7 @@ ALL_FORCE_INCLUDE = _dedup_preserve_order(
 CATEGORY_SIZES = {
     "named_colors": len(NAMED_COLORS_LIST),
     "hex_digit_pairs": len(HEX_DIGIT_PAIRS),
-    "integers_0_255": len(INTEGERS_0_255),
+    "integers_0_360": len(INTEGERS_0_360),
     "common_floats": len(COMMON_FLOATS),
     "css_properties": len(CSS_PROPERTIES),
     "css_at_keywords": len(CSS_AT_KEYWORDS),

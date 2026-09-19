@@ -118,7 +118,8 @@ class ColorAnchor:
     r: float
     g: float
     b: float
-    source: str            # "hex_r" | "hex_g" | "hex_b" | "named" | "rgb" | "rgba"
+    source: str            # "hex_r/g/b" | "named" | "rgb_r/g/b" | "rgba_r/g/b"
+                           # | "rgb" | "rgba" (close-paren fallback)
     channel: int | None = None    # 0/1/2 to anchor a single dim; None for all three
 
 
@@ -204,9 +205,18 @@ def _parse_hue(text: str) -> float | None:
     """Parse an hsl() hue. Accepts bare number, percentage, or <angle>
     dimension (deg, rad, turn, grad). Returns degrees in [0, 360)."""
     # Strip a trailing unit if present (DimensionToken text like "240deg")
+    # NOTE: "grad" must be checked BEFORE "rad" — "200grad".endswith("rad")
+    # is True, and the rad branch then fails to parse "200g", silently
+    # dropping every grad-unit hue. (Bug inherited from the original
+    # project; caught by tests/test_detection.py.)
     if text.endswith("deg"):
         try:
             v = float(text[:-3])
+        except ValueError:
+            return None
+    elif text.endswith("grad"):
+        try:
+            v = float(text[:-4]) * 0.9  # 400 grad == 360 deg
         except ValueError:
             return None
     elif text.endswith("rad"):
@@ -217,11 +227,6 @@ def _parse_hue(text: str) -> float | None:
     elif text.endswith("turn"):
         try:
             v = float(text[:-4]) * 360.0
-        except ValueError:
-            return None
-    elif text.endswith("grad"):
-        try:
-            v = float(text[:-4]) * 0.9  # 400 grad == 360 deg
         except ValueError:
             return None
     elif text.endswith("%"):
@@ -300,6 +305,49 @@ def _is_hex_pair(s: str) -> bool:
     return len(s) == 2 and all(c in HEX_CHARS for c in s)
 
 
+def _rgb_arg_positions(
+    tokens: list, open_idx: int, close_idx: int,
+) -> list[tuple[int, float]] | None:
+    """Locate the three rgb()/rgba() channel arguments as token positions.
+
+    Returns [(stream_pos, value_0_1), ...] for the R, G, B argument number
+    tokens, or None when the call can't be anchored per-argument:
+      - a nested function (var(), calc(), ...) makes argument alignment
+        ambiguous — skip the whole call rather than risk anchoring the
+        wrong token;
+      - fewer than three numeric arguments found.
+
+    Handles both comma syntax `rgb(255, 0, 0)` and modern space syntax
+    `rgb(255 0 0 / 50%)`: we simply take the first number token of each
+    argument group. Percent components ('100' followed by a '%' token)
+    are scaled 0-100 -> 0-255 before normalizing. A fourth numeric token
+    (alpha in rgba) is ignored — there is no alpha dim in this scheme.
+    """
+    positions: list[tuple[int, float]] = []
+    for i in range(open_idx + 1, close_idx):
+        text = _tok_text(tokens[i])
+        ttype = _tok_type(tokens[i])
+        if ttype == "func":
+            return None          # nested var()/calc() — bail out
+        if text == "/":
+            break                # modern alpha separator — channels are done
+        # With whitespace stripped by the walker and nested functions
+        # excluded, every number token inside rgb()/rgba() is a channel
+        # argument — true for both comma and space syntax. Multi-number
+        # arguments can only arise inside nested functions, which bail
+        # above.
+        if ttype == "number" and _is_number(text):
+            value = float(text)
+            # Percent form: number token followed by a '%' literal
+            if i + 1 < close_idx and _tok_text(tokens[i + 1]) == "%":
+                value = value / 100.0 * 255.0
+            value = max(0.0, min(255.0, value)) / 255.0
+            positions.append((i, value))
+            if len(positions) == 3:
+                return positions
+    return None
+
+
 def detect_colors(
     tokens: list,
 ) -> tuple[list[ColorAnchor], list[HslDetection]]:
@@ -315,10 +363,15 @@ def detect_colors(
     pair, dim 1 the second, dim 2 the third — instead of one combined
     anchor at a single point.
 
-    Function calls (rgb, rgba, hsl, hsla) emit a single ColorAnchor at the
-    closing `)` (channel=None), matching pre-redesign behavior. The walker
-    now emits the function name (`rgb`) and the open paren (`(`) as two
-    separate tokens; detection handles that split.
+    rgb()/rgba() calls are anchored per-argument — dim 0 at the R argument
+    token, dim 1 at G, dim 2 at B — mirroring the hex digit-pair scheme.
+    Calls with nested functions fall back to a single all-three anchor at
+    the closing `)` when the values still parse, else are skipped.
+
+    hsl()/hsla() are NEVER anchored. Their parsed values are returned in
+    the separate `hsls` list for post-hoc analysis only; nothing from that
+    list reaches the training loss. Every emergence claim in this project
+    rests on that separation — do not merge these lists.
     """
     anchors: list[ColorAnchor] = []
     hsls: list[HslDetection] = []
@@ -347,9 +400,13 @@ def detect_colors(
                 r = int(_tok_text(tokens[i + 1]), 16) / 255.0
                 g = int(_tok_text(tokens[i + 2]), 16) / 255.0
                 b = int(_tok_text(tokens[i + 3]), 16) / 255.0
-                anchors.append(ColorAnchor(i + 1, r, 0.0, 0.0, "hex_r", channel=0))
-                anchors.append(ColorAnchor(i + 2, 0.0, g, 0.0, "hex_g", channel=1))
-                anchors.append(ColorAnchor(i + 3, 0.0, 0.0, b, "hex_b", channel=2))
+                # Store the FULL colour in every record; `channel` alone
+                # decides which dim the loss supervises. (Previously the
+                # unsupervised slots held 0.0 placeholders — inert under the
+                # loss mask, but they made anchors.bin lie about the colour.)
+                anchors.append(ColorAnchor(i + 1, r, g, b, "hex_r", channel=0))
+                anchors.append(ColorAnchor(i + 2, r, g, b, "hex_g", channel=1))
+                anchors.append(ColorAnchor(i + 3, r, g, b, "hex_b", channel=2))
                 i += 4
                 continue
             i += 1
@@ -385,16 +442,30 @@ def detect_colors(
                 continue
             args = _collect_function_args(tokens, paren_idx, close)
 
-            if name in ("rgb", "rgba") and len(args) >= 3:
-                parsed_args = [_parse_rgb_component(a) for a in args[:3]]
-                if all(p is not None for p in parsed_args):
-                    r, g, b = parsed_args
-                    r = max(0.0, min(255.0, r)) / 255.0
-                    g = max(0.0, min(255.0, g)) / 255.0
-                    b = max(0.0, min(255.0, b)) / 255.0
-                    anchors.append(ColorAnchor(
-                        close, r, g, b, name, channel=None,
-                    ))
+            if name in ("rgb", "rgba"):
+                # Per-argument anchoring: dim 0 supervised at the R argument
+                # token, dim 1 at G, dim 2 at B — the same structural scheme
+                # as hex digit-pairs, and the literal reading of "constrain
+                # the first three dimensions to represent the arguments of
+                # rgb()". Falls back to the legacy all-three anchor at the
+                # closing ')' when per-argument extraction fails (nested
+                # functions, exotic forms) but the values still parse.
+                arg_pos = _rgb_arg_positions(tokens, paren_idx, close)
+                if arg_pos is not None:
+                    (rp, r), (gp, g), (bp, b) = arg_pos
+                    anchors.append(ColorAnchor(rp, r, g, b, f"{name}_r", channel=0))
+                    anchors.append(ColorAnchor(gp, r, g, b, f"{name}_g", channel=1))
+                    anchors.append(ColorAnchor(bp, r, g, b, f"{name}_b", channel=2))
+                elif len(args) >= 3:
+                    parsed_args = [_parse_rgb_component(a) for a in args[:3]]
+                    if all(p is not None for p in parsed_args):
+                        r, g, b = parsed_args
+                        r = max(0.0, min(255.0, r)) / 255.0
+                        g = max(0.0, min(255.0, g)) / 255.0
+                        b = max(0.0, min(255.0, b)) / 255.0
+                        anchors.append(ColorAnchor(
+                            close, r, g, b, name, channel=None,
+                        ))
 
             elif name in ("hsl", "hsla") and len(args) >= 3:
                 h = _parse_hue(args[0])

@@ -38,7 +38,10 @@ def main():
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44])
     parser.add_argument("--steps", type=int, default=5000)
     parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--files", type=int, default=1000)
+    parser.add_argument("--files", type=int, default=None,
+                        help="Cap on training files (default: ALL files in the "
+                             "pre-encoded shard — the stratified shard is "
+                             "already the intended training set)")
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--lambda-anchor", type=float, default=1.0)
     parser.add_argument("--lambda-sparse", type=float, default=0.1)
@@ -70,7 +73,7 @@ def main():
             "--seed", str(seed),
             "--steps", str(args.steps),
             "--batch-size", str(args.batch_size),
-            "--files", str(args.files),
+            *(["--files", str(args.files)] if args.files else []),
             "--lr", str(args.lr),
             "--lambda-anchor", str(args.lambda_anchor),
             "--lambda-sparse", str(args.lambda_sparse),
