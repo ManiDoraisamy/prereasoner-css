@@ -28,15 +28,24 @@ are tokenized as opaque units.
 single dimensions correlating with saturation at |r| = 0.84, hue at 0.78 and
 lightness at 0.77, each at its own component-token position.
 
-**Third**, and the point of the paper: *which* dimensions those are is not a
-fact about the model. Resampling the evaluation set — with the model held
-completely fixed — moves the winning index. So does changing the seed. What is
-stable is the *count* and the *magnitude*: a small number of dimensions reach
-|r| ≈ 0.8, reliably, at indices that carry no information across runs.
+**Third**, and the point of the paper: that emergence is not caused by the
+anchoring, and its location is not a fact about the model. An identical model
+trained with the colour constraint switched off encodes HSL just as strongly
+— for hue, slightly more. Across seeds, the best-carrying dimension changes
+completely (0% agreement, top-k overlap at chance), while the correlation
+magnitude reproduces to ±0.03.
 
-The practical consequence for interpretability-by-construction: supervision
-buys you an address, and emergence does not. If you want a dimension you can
-name, you have to name it.
+**Fourth**, the information is nearly all present regardless. A probe over all
+381 unanchored dimensions recovers hue at R² = 0.947, against 0.996 for
+anchored red read off a single dimension with no probe at all. The gap in
+information is five points; the gap in accessibility is total, since
+extracting the distributed version requires already holding the ground truth.
+
+The practical consequence for interpretability-by-construction: anchoring does
+not create structure, and it does not meaningfully improve fidelity. It
+relocates existing structure to an address readable without a probe. If you
+want a dimension you can name, you must name it — looking for one will not do,
+because it is somewhere different in every run.
 
 ---
 
@@ -218,7 +227,93 @@ closing paren:
 Hue is negative; lightness is indistinguishable from zero. The defensible
 summary is: saturation crystallizes, hue and lightness show partial structure.
 
-### 3.4 The index is not a fact about the model
+### 3.4 The HSL structure is not caused by the anchoring
+
+The result in §3.3 invites a causal reading: constrain `rgb()`, and dimensions
+spontaneously organize for `hsl()`. That reading is wrong, and the control that
+shows it is simple — train an otherwise identical model with
+`λ_anchor = λ_sparse = 0` and probe it the same way.
+
+**This run** (stratified shard, held-out files, seeds 42+43 vs λ=0, n=1500,
+split-half selection, permutation floor p95 = 0.098):
+
+| Property | Anchored (mean of 2 seeds) | Unanchored (λ=0) | Δ |
+|---|---|---|---|
+| Hue | 0.753 | **0.788** | **−0.035** |
+| Saturation | 0.761 | 0.742 | +0.019 |
+| Lightness | 0.804 | 0.781 | +0.024 |
+
+For hue the unanchored model is *better*. Every delta is within seed noise.
+
+**Phase 0 replication** (original checkpoints, matched λ=0 control,
+n = 1500) reached the same verdict independently:
+
+| Property | Anchored | Unanchored | Δ | dims ≥0.5 (anch/unanch) |
+|---|---|---|---|---|
+| Hue | 0.767 | 0.665 | +0.102 | 59 / **61** |
+| Saturation | 0.836 | 0.789 | +0.047 | 128 / 108 |
+| Lightness | 0.752 | 0.734 | +0.018 | 77 / 65 |
+
+Two independent corpora, two independent control checkpoints, same answer.
+Note that our shard carries **7.5× the hsl density** of the original and the
+gap did not widen — more hsl exposure lifts both models equally, which is
+exactly what one expects if the anchor loss is not what produces the
+structure.
+
+A CSS language model trained with **no anchor loss whatsoever** encodes hue,
+saturation and lightness nearly as strongly as the anchored one — and for hue
+it has *more* dimensions above threshold (61 vs 59). Next-token prediction on
+CSS is sufficient: the co-occurrence structure of real stylesheets already
+carries colour geometry.
+
+The anchoring contributes a real but modest increment, largest for hue
+(+0.10) and negligible for lightness (+0.02). That increment is the honest
+claim. "Dimensions crystallized for `hsl()` because we anchored `rgb()`" is
+not.
+
+This is the single most important negative in this work, and it only appears
+if you run the unanchored control. The original Phase 0 analysis did not, and
+consequently reported an emergence result that its own baseline does not
+support.
+
+### 3.5 The information is there; the address is not
+
+If HSL structure is not caused by the anchoring, how much of it does the model
+actually hold? We fit a ridge probe over **all 381 unanchored dimensions** on
+one half of the held-out examples and score it on the other:
+
+| Property | best single dim | **all 381 dims** | gain |
+|---|---|---|---|
+| Hue | 0.545 | **0.947** | +0.40 |
+| Saturation | 0.635 | **0.975** | +0.34 |
+| Lightness | 0.611 | **0.957** | +0.35 |
+
+(λ=0 baseline: 0.889 / 0.949 / 0.928 — statistically the same.)
+
+Hue is **95% recoverable**. The model encodes it almost as precisely as we
+force RGB to be encoded (99.6%). It is simply distributed: no single
+dimension carries more than ~60%, and pooling adds +0.40.
+
+This refutes a tempting intermediate hypothesis — that HSL occupies one
+non-axis-aligned *direction* which a well-aligned dimension would mostly
+capture. If that were so, pooling would add little. It adds a great deal, so
+the encoding is genuinely spread.
+
+The consequence is the paper's central point, now quantified:
+
+| | fidelity | how you read it |
+|---|---|---|
+| **Red (anchored)** | 99.6% | one dimension, no probe, same index every run |
+| **Hue (emergent)** | 94.7% | 381 dimensions + a probe fitted against known answers |
+
+The gap in *information* is 5 points. The gap in *accessibility* is total.
+Extracting hue requires already possessing the ground truth you wanted to
+extract — which defeats the purpose.
+
+**Anchoring does not add information. It relocates information to an address
+that can be read without already knowing the answer.**
+
+### 3.6 Index stability
 
 This is the part that changes how the rest should be read.
 
@@ -230,13 +325,14 @@ sample size has to be reported alongside any correlation of this kind — a "wea
 but present" |r| = 0.2 on a few hundred examples is indistinguishable from
 nothing.
 
-**Resampling moves the winner, with the model frozen.** Bootstrap-resampling
-the evaluation examples and re-running the same argmax — same checkpoint, same
-weights, same activations — the winning index moves. We observed this
-accidentally first: at n = 250, hue's best dimension is 377; at n = 1500 it is
-100. Same model, different sample, different answer.
-
-⏳ *Bootstrap distribution over 500 resamples at n = 1500: pending.*
+**Resampling does NOT move the winner at adequate n — we initially got this
+wrong.** At n = 250 the winning dimension for hue differed from the n = 1500
+answer (377 vs 100), which looked like index instability. It was not: at
+n = 1500, bootstrap over 500 resamples gives modal-dim win rates of
+**H 94%, S 100%, L 96%**. Within a fixed checkpoint the index is stable. The
+n = 250 result was an underpowered probe, and we report it only because we
+briefly believed it. Cross-seed stability is a separate question and remains
+open pending seeds 43/44.
 
 **Seeds move it too.** ⏳ *Three seeds, identical in every respect but
 initialization and data order: pending. Predictions registered below.*

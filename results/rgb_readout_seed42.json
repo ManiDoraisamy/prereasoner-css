@@ -1,0 +1,109 @@
+{
+  "checkpoint": "data\\seeds\\seed42\\step_005000.pt",
+  "step": 5000,
+  "n_files": 400,
+  "n_anchor_values": 16357,
+  "by_source": {
+    "hex_b/dim2": {
+      "n": 4215,
+      "pearson_r": 0.9984551740235353,
+      "mae": 0.01689736087370051,
+      "channel": 2,
+      "source": "hex_b"
+    },
+    "hex_g/dim1": {
+      "n": 4218,
+      "pearson_r": 0.9979222291799887,
+      "mae": 0.018169744604457957,
+      "channel": 1,
+      "source": "hex_g"
+    },
+    "hex_r/dim0": {
+      "n": 4220,
+      "pearson_r": 0.9983635200802574,
+      "mae": 0.018134326052525438,
+      "channel": 0,
+      "source": "hex_r"
+    },
+    "named/dim0": {
+      "n": 365,
+      "pearson_r": 0.9225309314196334,
+      "mae": 0.07926787555655013,
+      "channel": 0,
+      "source": "named"
+    },
+    "named/dim1": {
+      "n": 365,
+      "pearson_r": 0.9424667329423647,
+      "mae": 0.08137401501890026,
+      "channel": 1,
+      "source": "named"
+    },
+    "named/dim2": {
+      "n": 365,
+      "pearson_r": 0.9364352441544814,
+      "mae": 0.08787139305345096,
+      "channel": 2,
+      "source": "named"
+    },
+    "rgb_b/dim2": {
+      "n": 194,
+      "pearson_r": 0.9905297839071061,
+      "mae": 0.035900390462154284,
+      "channel": 2,
+      "source": "rgb_b"
+    },
+    "rgb_g/dim1": {
+      "n": 194,
+      "pearson_r": 0.9876972233789386,
+      "mae": 0.03734692709016298,
+      "channel": 1,
+      "source": "rgb_g"
+    },
+    "rgb_r/dim0": {
+      "n": 194,
+      "pearson_r": 0.9904892836752818,
+      "mae": 0.035945009466739605,
+      "channel": 0,
+      "source": "rgb_r"
+    },
+    "rgba_b/dim2": {
+      "n": 675,
+      "pearson_r": 0.9961900293989593,
+      "mae": 0.02098607917232797,
+      "channel": 2,
+      "source": "rgba_b"
+    },
+    "rgba_g/dim1": {
+      "n": 675,
+      "pearson_r": 0.9955174649561855,
+      "mae": 0.021402774348600714,
+      "channel": 1,
+      "source": "rgba_g"
+    },
+    "rgba_r/dim0": {
+      "n": 677,
+      "pearson_r": 0.9960628440558993,
+      "mae": 0.020455077195350013,
+      "channel": 0,
+      "source": "rgba_r"
+    }
+  },
+  "synthetic_ood_hex": {
+    "R": {
+      "n": 200,
+      "pearson_r": 0.9880089223758606,
+      "mae": 0.037750994536806554
+    },
+    "G": {
+      "n": 200,
+      "pearson_r": 0.9935214581247578,
+      "mae": 0.02925170639478693
+    },
+    "B": {
+      "n": 200,
+      "pearson_r": 0.9963789429394658,
+      "mae": 0.03510812821177144
+    }
+  }
+}

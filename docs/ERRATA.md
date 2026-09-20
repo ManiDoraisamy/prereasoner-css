@@ -81,6 +81,26 @@ part that generalizes to unseen colours.
 
 ---
 
+## Error 4 — the word "surprisingly" (the effect is mostly not the anchoring)
+
+This is the substantive one, and it was found only by running the control the
+original analysis skipped: an otherwise identical model with
+`λ_anchor = λ_sparse = 0`.
+
+| Property | Anchored | Unanchored | Δ |
+|---|---|---|---|
+| Saturation | 0.836 | **0.789** | +0.047 |
+| Hue | 0.767 | **0.665** | +0.102 |
+| Lightness | 0.752 | **0.734** | +0.018 |
+
+A model that was never anchored encodes HSL nearly as well, and for hue has
+*more* dimensions above threshold (61 vs 59). The paragraph's implied causal
+story — we constrained `rgb()`, and `hsl()` dimensions crystallized in
+response — is not supported. CSS co-occurrence statistics account for most of
+it; the anchor loss adds a modest increment, mostly to hue.
+
+The dimensions really do encode HSL. They would have done so anyway.
+
 ## Two omissions worth fixing while you're in there
 
 **The three dims are not one readable triple.** Each is the best dim at a
@@ -124,6 +144,35 @@ find it.
 > lightness show partial structure. And this is one training run — which
 > dimensions get the job is almost certainly an accident of initialization,
 > even if the fact that some small set of them does is not.
+
+### Revised again, after the unanchored control
+
+The paragraph above was written before the λ=0 control existed. With it, the
+honest version is:
+
+> To understand this better, I trained a small 384-dimensional transformer on
+> 100,000 CSS files, constraining its first three dimensions to carry the red,
+> green and blue channels of every colour literal it read. It worked: reading
+> dimension 0 off a hex code the model had never seen recovers its red channel
+> at r = 0.996 — one number, read directly, no analysis required.
+>
+> Then I checked what the model knew about `hsl()`, which I had never
+> constrained at all. It knew almost everything: hue was 95% recoverable from
+> its internal state. But not from any one dimension — only by combining all
+> 381 of the others through a probe I had to fit using the very answers I was
+> trying to extract. And when I trained the same model with the colour
+> constraint switched off entirely, it knew hue just as well.
+>
+> So the constraint added no knowledge. What it added was an address. The model
+> understood colour either way; without anchoring it understood colour in
+> coordinates I could not name, spread across hundreds of dimensions, landing
+> somewhere different every time I retrained it. That is the whole problem in
+> miniature — not that the machine fails to know a thing, but that it knows it
+> in a language with no words I can point to.
+
+That last clause is the real point, and it is stronger than the original
+claim. Unanchored models have the structure but no address; anchored models
+put it at a known coordinate you can read without fitting a probe.
 
 ### Shorter version, if the essay needs the space
 

@@ -389,6 +389,42 @@ def summarize(per_seed, seed_labels):
     return summary
 
 
+def compare_to_baseline(per_seed, baseline, control):
+    """Is the HSL structure attributable to anchoring, or just present anyway?
+
+    The emergence claim is only interesting if an anchored model encodes H/S/L
+    MORE strongly than an otherwise-identical model trained with no anchor
+    loss. An unanchored CSS language model already has reason to correlate
+    with hue-ish things: CSS co-occurrence alone ("dark themes use low
+    lightness") produces alignment that has nothing to do with our loss.
+
+    Reports, per property, anchored vs baseline holdout |r| and their
+    difference, both against the permutation floor.
+    """
+    floor = control["p95_peak_r"]
+    out = {}
+    for prop, probe in CANONICAL_PROBE.items():
+        anc = [s[probe][prop]["holdout_r"] for s in per_seed]
+        base = [b[probe][prop]["holdout_r"] for b in baseline]
+        anc_mean, base_mean = float(np.mean(anc)), float(np.mean(base))
+        out[prop] = {
+            "probe": probe,
+            "anchored_mean_holdout_r": anc_mean,
+            "anchored_holdout_r": anc,
+            "baseline_mean_holdout_r": base_mean,
+            "baseline_holdout_r": base,
+            "delta": anc_mean - base_mean,
+            "anchored_dims": [s[probe][prop]["best_dim"] for s in per_seed],
+            "baseline_dims": [b[probe][prop]["best_dim"] for b in baseline],
+            "anchored_n_above_0.5": [s[probe][prop]["n_above_0.5"] for s in per_seed],
+            "baseline_n_above_0.5": [b[probe][prop]["n_above_0.5"] for b in baseline],
+            "permutation_p95_floor": floor,
+            "anchored_clears_floor": anc_mean > floor,
+            "baseline_clears_floor": base_mean > floor,
+        }
+    return out
+
+
 def strip_vectors(per_seed):
     """Drop the 384-float vectors before writing JSON."""
     return [
@@ -404,9 +440,16 @@ def strip_vectors(per_seed):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ckpt", type=Path, action="append", required=True,
-                        help="Checkpoint path; repeat once per seed.")
+                        help="Anchored checkpoint path; repeat once per seed.")
     parser.add_argument("--label", action="append", default=None,
                         help="Label per checkpoint (default: parent dir name).")
+    parser.add_argument("--baseline-ckpt", type=Path, action="append", default=None,
+                        help="UNANCHORED (lambda=0) checkpoint(s), same corpus "
+                             "and tokenizer. Probed identically, then reported "
+                             "as an anchored-minus-baseline delta. This is the "
+                             "control that decides whether HSL structure is "
+                             "attributable to anchoring or is simply present in "
+                             "any CSS language model.")
     parser.add_argument("--stage2-dir", default="data/parsed/stage2")
     parser.add_argument("--css-dir", default="data/stage1/css")
     parser.add_argument("--file-list", default=None,
@@ -474,6 +517,22 @@ def main():
         if acts0 is None:
             acts0 = acts
 
+    # ---- unanchored control -------------------------------------------
+    baseline = []
+    if args.baseline_ckpt:
+        print(f"\n[2b] Probing {len(args.baseline_ckpt)} UNANCHORED "
+              f"baseline checkpoint(s)...")
+        for path in args.baseline_ckpt:
+            print(f"  baseline: {path}")
+            model, cfg, ckpt = load_model(path, args.device)
+            if cfg.hidden_dim != cfg0.hidden_dim:
+                raise SystemExit(
+                    f"hidden_dim mismatch on baseline {path}: "
+                    f"{cfg.hidden_dim} vs {cfg0.hidden_dim}")
+            result, _ = probe_checkpoint(model, cfg, examples,
+                                         args.device, split)
+            baseline.append(result)
+
     print(f"\n[3] Bootstrap index stability on {labels[0]} "
           f"({args.n_boot} resamples, model held fixed)...")
     bootstrap = bootstrap_index_stability(acts0, examples, args.n_boot, rng)
@@ -531,9 +590,36 @@ def main():
             print(f"  top-{ov['k']:<3} overlap: Jaccard "
                   f"{ov['mean_jaccard']:.3f} vs chance {ov['chance_jaccard']:.3f}")
 
+    comparison = (compare_to_baseline(per_seed, baseline, control)
+                  if baseline else None)
+    if comparison:
+        print(f"\n{'=' * 72}\n  Anchored vs UNANCHORED baseline  "
+              f"(the attribution test)\n{'=' * 72}")
+        print(f"  permutation p95 floor = {control['p95_peak_r']:.3f}\n")
+        print(f"  {'prop':<6}{'anchored':>10}{'baseline':>10}{'delta':>9}"
+              f"{'  verdict'}")
+        for prop, c in comparison.items():
+            if not c["anchored_clears_floor"]:
+                verdict = "anchored at/below chance"
+            elif not c["baseline_clears_floor"] and c["delta"] > 0.1:
+                verdict = "attributable to anchoring"
+            elif c["delta"] > 0.1:
+                verdict = "anchoring adds signal"
+            elif abs(c["delta"]) <= 0.1:
+                verdict = "present without anchoring"
+            else:
+                verdict = "baseline exceeds anchored"
+            print(f"  {prop:<6}{c['anchored_mean_holdout_r']:>10.3f}"
+                  f"{c['baseline_mean_holdout_r']:>10.3f}"
+                  f"{c['delta']:>+9.3f}  {verdict}")
+        print("\n  'present without anchoring' would mean CSS co-occurrence,"
+              "\n  not our loss, explains the correlation.")
+
     out = {
         "n_examples": len(examples),
         "checkpoints": [str(c) for c in args.ckpt],
+        "baseline_checkpoints": [str(c) for c in (args.baseline_ckpt or [])],
+        "anchored_vs_baseline": comparison,
         "labels": labels,
         "steps": steps,
         "hidden_dim": cfg0.hidden_dim,
