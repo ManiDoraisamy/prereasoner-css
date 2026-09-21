@@ -234,16 +234,18 @@ spontaneously organize for `hsl()`. That reading is wrong, and the control that
 shows it is simple — train an otherwise identical model with
 `λ_anchor = λ_sparse = 0` and probe it the same way.
 
-**This run** (stratified shard, held-out files, seeds 42+43 vs λ=0, n=1500,
-split-half selection, permutation floor p95 = 0.098):
+**This run** (stratified shard, held-out files, 3 anchored seeds vs λ=0,
+n=1500, split-half selection, permutation floor p95 = 0.098):
 
-| Property | Anchored (mean of 2 seeds) | Unanchored (λ=0) | Δ |
+| Property | Anchored (mean of 3 seeds) | Unanchored (λ=0) | Δ |
 |---|---|---|---|
-| Hue | 0.753 | **0.788** | **−0.035** |
-| Saturation | 0.761 | 0.742 | +0.019 |
-| Lightness | 0.804 | 0.781 | +0.024 |
+| Hue | 0.754 | **0.788** | **−0.034** |
+| Saturation | 0.768 | 0.742 | +0.026 |
+| Lightness | 0.794 | 0.781 | +0.013 |
 
-For hue the unanchored model is *better*. Every delta is within seed noise.
+For hue the unanchored model is *better*. Every delta is within seed noise
+(the anchored seeds themselves vary by ±0.02–0.03), so none of these is
+distinguishable from zero.
 
 **Phase 0 replication** (original checkpoints, matched λ=0 control,
 n = 1500) reached the same verdict independently:
@@ -313,7 +315,32 @@ extract — which defeats the purpose.
 **Anchoring does not add information. It relocates information to an address
 that can be read without already knowing the answer.**
 
-### 3.6 Index stability
+### 3.6 Index stability: the location is arbitrary, the strength is not
+
+Three seeds, identical in every respect but initialization and data order,
+probed on byte-identical held-out examples:
+
+| Property | seed 42 | seed 43 | seed 44 | agreement | \|r\| across seeds |
+|---|---|---|---|---|---|
+| Hue | 296 | 70 | 29 | **0%** | 0.754 ± 0.026 |
+| Saturation | 93 | 297 | 356 | **0%** | 0.768 ± 0.024 |
+| Lightness | 26 | 263 | 82 | **0%** | 0.794 ± 0.018 |
+
+Nine dimensions, nine distinct answers, across three pairwise comparisons per
+property. Top-k set overlap is at or below the simulated chance rate
+(top-5 Jaccard 0.000 vs chance 0.007 for hue and saturation). The λ=0 model
+adds three more indices — 266, 19, 251 — none matching any anchored seed.
+
+The correlation *magnitude*, by contrast, reproduces to ±0.02–0.03.
+
+This is the weak/count hypothesis of §3.4, confirmed: *how much* structure
+exists is a reproducible property of the setup; *where* it sits is an accident
+of initialization. Magnitude and count cannot discriminate the two
+hypotheses — only index agreement and set overlap can, which is why a study
+reporting "dimension 100 encodes hue at 0.78" has not tested what it sounds
+like it tested.
+
+### 3.7 Bootstrap: resampling does not move the index
 
 This is the part that changes how the rest should be read.
 

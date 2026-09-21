@@ -85,9 +85,22 @@ trains nothing and settles it: it probes N same-architecture, different-seed
 checkpoints on byte-identical HSL examples and reports index agreement, top-k
 set overlap against chance, and the spread of the correlation magnitudes.
 
-> **Status: running.** Results land in `results/seed_robustness.json`.
-> Until then, treat "dimension 100 is hue" as a fact about one checkpoint, not
-> about the method.
+> **Status: settled.** The weak reading is correct.
+>
+> | Property | seed 42 | seed 43 | seed 44 | agreement | \|r\| |
+> |---|---|---|---|---|---|
+> | Hue | 296 | 70 | 29 | **0%** | 0.754 ± 0.026 |
+> | Saturation | 93 | 297 | 356 | **0%** | 0.768 ± 0.024 |
+> | Lightness | 26 | 263 | 82 | **0%** | 0.794 ± 0.018 |
+>
+> And the structure is **not caused by the anchoring**: an identical λ=0 model
+> scores 0.788 / 0.742 / 0.781 — better than the anchored models for hue.
+> A probe over all 381 unanchored dims recovers hue at **94.7%**, against
+> 99.6% for anchored red read off one dimension with no probe.
+>
+> Anchoring does not add the information. It relocates it to an address you
+> can read without already knowing the answer.
+> See `results/hsl_final_3seed.json` and `results/capacity_compare.json`.
 
 ---
 

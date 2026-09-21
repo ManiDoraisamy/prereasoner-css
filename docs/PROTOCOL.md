@@ -1,5 +1,15 @@
 # Pre-registered protocol — locked before training
 
+> **STATUS (2026-09-21): all analyses complete.** 3 anchored seeds (42/43/44)
+> + 1 λ=0 baseline trained; A, B, C, D and E all executed as specified.
+> Outcomes: **A passed** (hex r = 0.998, rgb-args r = 0.988, both above the
+> pre-committed thresholds). **B met the "partial" band** — saturation
+> holdout |r| = 0.768, above 0.70 in every seed, so the emergence claim is
+> supported *as stated*; but **C and the λ=0 control together show it is not
+> attributable to anchoring** (Δ = −0.034 to +0.026, hue better unanchored),
+> and index agreement is **0%**. The prediction registered under C — that
+> indices would scatter — held. Nothing was revised after seeing results.
+
 Written 2026-09-18, before the vocabulary build, before pre-encoding, before
 any of the runs it governs. Every headline number in the paper comes from the
 analyses named here, computed the way described here. If a result forces a
